@@ -1,0 +1,16 @@
+{
+  "name": "dynamo-local-load",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "local-load": "node local-load.js"
+  },
+  "keywords": [],
+  "author": "Zane Littrell",
+  "license": "Apache",
+  "dependencies": {
+    "aws-sdk": "^2.552.0"
+  }
+}
