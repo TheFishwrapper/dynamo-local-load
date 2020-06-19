@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /*
  * Copyright 2020 Zane Littrell
  *
@@ -13,7 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-const config = require("./config.json");
+const fs = require("fs");
+const path = require("path");
 const AWS = require("aws-sdk");
 const db = new AWS.DynamoDB({
   region: "localhost",
@@ -23,46 +25,79 @@ const s3 = new AWS.S3({
   region: "us-east-1"
 });
 
-const BUCKET = process.env.BUCKET || config.bucket;
-const STAGE = process.env.STAGE || "dev";
+const CONFIG_FILE = ".loadrc";
+const FILE_ENCODING = "utf8";
 
-s3.listObjectsV2({ Bucket: BUCKET }).promise()
-.then(data => {
-  const contents = data.Contents;
-  let keys = [];
-  for (let i = 0; i < contents.length; i++) {
-    const key = contents[i].Key;
-    if (key.endsWith(`-${STAGE}.json`)) {
-      keys.push(key);
-    }
+/**
+ * Main function that is called when the program is run.
+ */
+function main() {
+  try {
+    const configPath = path.join(__dirname, CONFIG_FILE);
+    const data = fs.readFileSync(configPath, FILE_ENCODING);
+    const configMap = parseConfig(data);
+    console.log('Got config ' + JSON.stringify(configMap));
+    (async() => await loadBackups(configMap["bucket"], configMap["stage"]))();
+    console.log("Loaded tables into local DynamoDB");
+  } catch (e) {
+    console.error("Error: " + e);
   }
-  const promises = keys.map(key => {
-    const params = {
-      Bucket: BUCKET,
-      Key: key
-    };
-    return s3.getObject(params).promise();
-  });
-  // Add file names to the front of promises array
-  promises.unshift(Promise.resolve(keys));
-  return Promise.all(promises);
-}).then(data => {
-  const filenames = data[0];
-  let promises = [];
-  for (let i = 1; i < data.length; i++) {
-    const filename = filenames[i - 1];
-    let table = filename.replace(".json", "");
-    const buf = data[i].Body;
-    const ar = JSON.parse(buf.toString());
-    for (let j = 0; j < ar.length; j++) {
+}
+
+/**
+ * Parses the config file. Each attribute is on a new line, where the key is in
+ * front of a colon and the value follow the colon.
+ *
+ * @param data String contents of the config file.
+ *
+ * @return Object of the config attributes.
+ */
+function parseConfig(data) {
+  let configMap = {};
+  const lines = data.split(/\r?\n/);
+  for (const line of lines) {
+    const splitLine = line.split(":");
+    configMap[splitLine[0]] = splitLine[1];
+  }
+  return configMap;
+}
+
+/**
+ * Loads the backup files from the given bucket that are of the given stage.
+ *
+ * @param String name of S3 bucket that contains the backups.
+ * @param String name of the stage of the backups (dev, production, etc.).
+ *
+ * @throws Error if there is an error with S3 or DynamoDB.
+ */
+async function loadBackups(bucket, stage) {
+  try {
+    const data = await s3.listObjectsV2({ Bucket: bucket }).promise();
+    const keys = data.Contents.filter(file => file.Key.endsWith(`-${stage}.json`));
+    const backupPromises = keys.map(key => {
       const params = {
-        TableName: table,
-        Item: ar[j]
+        Bucket: bucket,
+        Key: key.Key
       };
-      promises.push(db.putItem(params).promise());
+      return s3.getObject(params).promise();
+    });
+    const backups = await Promise.all(backupPromises);
+    let dynamoPromises = [];
+    for (let i = 0; i < keys.length; i++) {
+      const table = keys[i].Key.replace(".json", "");
+      const ar = JSON.parse(backups[i].Body.toString());
+      for (let j = 0; j < ar.length; j++) {
+        const params = {
+          TableName: table,
+          Item: ar[j]
+        };
+        dynamoPromises.push(db.putItem(params).promise());
+      }
     }
+    await Promise.all(dynamoPromises);
+  } catch (e) {
+    throw e;
   }
-  return Promise.all(promises);
-}).then(data => {
-  console.log("Loaded tables into local DynamoDB");
-}).catch(error => console.error(error));
+}
+
+main();

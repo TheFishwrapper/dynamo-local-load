@@ -1,15 +1,22 @@
 {
-  "name": "dynamo-local-load",
+  "name": "@capitalist-lepton/local-load",
   "version": "1.0.0",
-  "description": "Short node program to sync the local DynamoDB with backups stored in an S3 bucket.",
-  "main": "index.js",
+  "description": "Short node program to sync the local DynamoDB instance with backups stored in an S3 bucket.",
+  "main": "local-load.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "local-load": "node local-load.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "@capitalist-lepton/local-load": "./local-load.js",
+    "local-load": "./local-load.js"
   },
   "keywords": [],
   "author": "Zane Littrell",
-  "license": "Apache",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/TheFishwrapper/dynamo-local-load",
   "dependencies": {
     "aws-sdk": "^2.552.0"
   }
